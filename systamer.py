@@ -1,14 +1,22 @@
+import time
 from pathlib import Path # todo dependencies?
 import os
+import contextlib
+from typing import NoReturn
+import hashlib # todo dependencies?
+import httpcore
+import telegram.error
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup # todo dependencies
+from telegram import Update, Document, PhotoSize, Video, Audio, Voice, VideoNote
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler, CallbackQueryHandler
+
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
-import nest_asyncio
+import nest_asyncio # todo dependencies
 import asyncio
 import psutil # todo dependencies
-from telegram.ext import Updater, CommandHandler
+from telegram.ext import CommandHandler
 import pyautogui
 from io import BytesIO
-from PIL import Image
 
 # Apply nest_asyncio to allow nested event loops
 nest_asyncio.apply()
@@ -20,6 +28,7 @@ bot_token = ':'
 # Directory where files will be saved
 UPLOAD_DIR = os.path.join(os.getcwd(), "uploads")
 
+BROWSE_PATH_DICT = dict()
 
 async def send_screenshot(update, context):
     # Take a screenshot
@@ -31,20 +40,57 @@ async def send_screenshot(update, context):
     byte_io.seek(0)
 
     # Send the screenshot back
-    await update.message.reply_photo(photo=byte_io)
+    await update.message.reply_photo(photo=byte_io) # TODO wrapper for timeout here
+    # TODO also set a timeout param here and for the rest of the msgs
 
 async def handle_file_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not os.path.exists(UPLOAD_DIR):
         os.makedirs(UPLOAD_DIR)
 
-    file = update.message.document
-    if file:
-        file_path = os.path.join(UPLOAD_DIR, file.file_name)
-        await file.get_file().download(file_path)
-        await update.message.reply_text(f"File '{file.file_name}' has been uploaded to '{UPLOAD_DIR}'.")
-    else:
-        await update.message.reply_text("No file was uploaded. Please try again.")
+    # todo make a loop or smth
+    if update.message.document:
+        file = await update.message.document.get_file()
+        file_path = os.path.join(UPLOAD_DIR, update.message.document.file_name)
+        await file.download_to_drive(file_path)
+        await update.message.reply_text(
+            f"Document '{update.message.document.file_name}' has been uploaded to '{UPLOAD_DIR}'.")
 
+    elif update.message.photo:
+        photo = await update.message.photo[-1].get_file()  # Get the best quality photo
+        file_path = os.path.join(UPLOAD_DIR, f"{photo.file_id}.jpg")
+        await photo.download_to_drive(file_path)
+        await update.message.reply_text(f"Photo has been uploaded to '{UPLOAD_DIR}' as '{photo.file_id}.jpg'.")
+
+    elif update.message.video:
+        video = await update.message.video.get_file()
+        file_path = os.path.join(UPLOAD_DIR, f"{update.message.video.file_name or video.file_id}.mp4")
+        await video.download_to_drive(file_path)
+        await update.message.reply_text(
+            f"Video has been uploaded to '{UPLOAD_DIR}' as '{update.message.video.file_name or video.file_id}.mp4'.")
+
+    elif update.message.audio:
+        audio = await update.message.audio.get_file()
+        file_path = os.path.join(UPLOAD_DIR, f"{update.message.audio.file_name or audio.file_id}.mp3")
+        await audio.download_to_drive(file_path)
+        await update.message.reply_text(
+            f"Audio file has been uploaded to '{UPLOAD_DIR}' as '{update.message.audio.file_name or audio.file_id}.mp3'.")
+
+    elif update.message.voice:
+        voice = await update.message.voice.get_file()
+        file_path = os.path.join(UPLOAD_DIR, f"{voice.file_id}.ogg")
+        await voice.download_to_drive(file_path)
+        await update.message.reply_text(
+            f"Voice message has been uploaded to '{UPLOAD_DIR}' as '{voice.file_id}.ogg'.")
+
+    elif update.message.video_note:
+        video_note = await update.message.video_note.get_file()
+        file_path = os.path.join(UPLOAD_DIR, f"{video_note.file_id}.mp4")
+        await video_note.download_to_drive(file_path)
+        await update.message.reply_text(
+            f"Video note has been uploaded to '{UPLOAD_DIR}' as '{video_note.file_id}.mp4'.")
+
+    else:
+        await update.message.reply_text("No file or media was uploaded. Please try again.")
 
 async def system_resource_monitoring(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("system")
@@ -82,20 +128,38 @@ async def kill_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('Send /browse to start navigating your file system.')
+    # todo for cmd in cmd list
+    welcome_message = (
+        "Welcome to the bot! Here are the commands you can use:\n\n"
+        "/browse - Start navigating your file system.\n"
+        "/upload - Upload a file to the server.\n"
+        "/system - Get system resource usage.\n"
+        "/processes - List running processes.\n"
+        "/kill <PID> - Kill a process by its PID.\n"
+        "/screenshot - Take a screenshot and send it.\n"
+    )
+    await update.message.reply_text(welcome_message)
+
+async def upload_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # todo for cmd in cmd list
+    upload_message = (
+        f"Simply send a file, and it will be saved to -> {UPLOAD_DIR}"
+    )
+    await update.message.reply_text(upload_message)
 
 
 def list_files_and_directories(path: str):
-    ITEMS_PER_PAGE = 10 # todo
-
     entries = os.listdir(path)
     buttons = []
-    for entry in entries[:ITEMS_PER_PAGE]:  # Limit the number of entries per message
+    BROWSE_PATH_DICT.clear()
+    for entry in entries:  # Limit the number of entries per message
         full_path = os.path.join(path, entry)
+        entry_hashed = hashlib.md5(full_path.encode()).hexdigest()
+        BROWSE_PATH_DICT[entry_hashed] =  full_path # todo simplify remove above line
         if os.path.isdir(full_path):
-            buttons.append(InlineKeyboardButton(entry + '/', callback_data=f"cd {full_path}"))
+            buttons.append(InlineKeyboardButton(entry + '/', callback_data=f"cd {entry_hashed}"))
         else:
-            buttons.append(InlineKeyboardButton(entry, callback_data=f"file {full_path}"))
+            buttons.append(InlineKeyboardButton(entry, callback_data=f"file {entry_hashed}"))
 
     return buttons
 
@@ -111,8 +175,10 @@ async def browse(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_navigation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # TODO if access is denied - send back a msg access is denied...
     query = update.callback_query
-    command, path = query.data.split(' ', 1)
+    command, hashed_path = query.data.split(' ', 1)
+    path = BROWSE_PATH_DICT[hashed_path]  # todo if does not exist - exc?
 
     if command == "cd":
         buttons = list_files_and_directories(path)
@@ -126,27 +192,55 @@ async def handle_navigation(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_document(document=file)
 
 
-async def main():
+async def main() -> None:
     # Build the application
     application = ApplicationBuilder().token(bot_token).build()
 
     # Register the handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("browse", browse))
-    application.add_handler(CommandHandler("upload", handle_file_upload))
     application.add_handler(CommandHandler("system", system_resource_monitoring))
     application.add_handler(CommandHandler("processes", list_processes))
     application.add_handler(CommandHandler("kill", kill_process))
     application.add_handler(CommandHandler("screenshot", send_screenshot))
 
+    application.add_handler(MessageHandler(filters.Document.ALL, handle_file_upload))
+    application.add_handler(MessageHandler(filters.PHOTO, handle_file_upload))
+    application.add_handler(MessageHandler(filters.VIDEO, handle_file_upload))
+    application.add_handler(MessageHandler(filters.AUDIO, handle_file_upload))
+    application.add_handler(MessageHandler(filters.VOICE, handle_file_upload))
+    application.add_handler(MessageHandler(filters.VIDEO_NOTE, handle_file_upload))
+    application.add_handler(CommandHandler("upload", upload_info)) # todo needed? or simply add description in this cmd
+
+
+
     application.add_handler(CallbackQueryHandler(handle_navigation))
 
     # Run the bot
-    await application.run_polling()
-
+    try:
+        print("Initializing application...")
+        await application.initialize()
+        print("Starting application...")
+        await application.start()
+        print("Starting updater polling...")
+        await application.updater.start_polling()
+        await asyncio.Event().wait()
+    except KeyboardInterrupt: # todo verify if needed
+        print("Stopping updater polling...")
+        await application.updater.stop()
+        print("Stopping application...")
+        await application.stop()
+    except telegram.error.InvalidToken:
+        print("bad token")
+    except httpcore.ConnectTimeout:
+        print("timeout - check connection")
+    finally:
+        print("Shutting down application...")
+        await application.shutdown()
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    asyncio.get_event_loop().run_until_complete(main())
+
 
 
 RESET = '\033[0m'
