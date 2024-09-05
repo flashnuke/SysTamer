@@ -31,6 +31,7 @@ PASSWORD = "mypassword"  # Set your password here
 # TODO cmd delete uploads - or not
 # TODO cmd "ls" uploads - or not
 
+
 def load_config(conf_path: str) -> Dict[str, Any]:
     """Loads a JSON file and returns the data as a dictionary."""
     try:
@@ -42,10 +43,10 @@ def load_config(conf_path: str) -> Dict[str, Any]:
     except json.JSONDecodeError:
         print(f"Error decoding config -> {conf_path}.") # todo handle errors etc in a more controlled manner
 
-
-
 class SysTamer:
-    def require_authentication(func):
+    _SENSITIVE_FILES = ["config.json"]
+
+    def require_authentication(func, *args, **kwargs):
         async def _impl(self, update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
             if context.user_data.get("authenticated", False):
                 # User is authenticated, proceed with the function
@@ -55,6 +56,24 @@ class SysTamer:
                 await update.message.reply_text("please login /login <password>") # todo better msg
 
         return _impl
+
+    def check_for_permission(func, *args, **kwargs):
+        async def _impl(self, update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+            try:
+                return await func(self, update, context, *args, **kwargs)
+            except PermissionError:
+                if update.effective_message:
+                    await update.effective_message.reply_text("permission error")  # todo better msg
+                if update.callback_query: # todo export this outside and use for login as well?
+                    try:
+                        await context.bot.delete_message(
+                            chat_id=update.effective_chat.id,  # Get the chat ID
+                            message_id=update.effective_message.message_id  # Get the message ID
+                        )
+                    except telegram.error.BadRequest as e:
+                        print(f"Error deleting message: {e}")
+        return _impl
+
     def __init__(self, json_conf: dict):
         self._bot_token = json_conf.get("bot_token", None)
         if not self._bot_token:  # todo export and handle in a config handler in a more generic manner
@@ -65,6 +84,7 @@ class SysTamer:
         self._browse_path_dict = dict()
 
     async def login(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        # todo remove msg with pass after
         # Check if the user provided a password with the /login command
         if len(context.args) == 0:
             await update.message.reply_text("Please provide a password. Usage: /login <password>")
@@ -167,22 +187,43 @@ class SysTamer:
     @staticmethod
     async def list_processes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         processes = []
+        args_lower = [i.lower() for i in context.args]
         for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+            if len(context.args) > 0:
+                # filter provided - and proc is not in list (using any() to check for substr)
+                filter_name = any(s in proc.info['name'].lower() for s in args_lower if proc.info['name'])
+                filter_pid = any(s in str(proc.info['pid']) for s in args_lower)
+                if not (filter_name or filter_pid):
+                    continue
             processes.append(f"PID: {proc.info['pid']}, Name: {proc.info['name']}, "
-                             f"CPU: {proc.info['cpu_percent']}%, Memory: {proc.info['memory_percent']}%")
+                             f"CPU: {proc.info['cpu_percent']}%, Mem: {round(proc.info['memory_percent'], 1)}%")
 
-        response = "\n".join(processes[:20])  # Limit to the first 20 processes for readability
-        await update.message.reply_text(response)
+        if len(processes) == 0:
+            output = "no processes found"
+            if len(context.args) > 0:
+                output += f", filters: {context.args}"
+            await update.message.reply_text(output)
+        else:
+            response_lst = list()
+            for proc in processes:
+                response_lst.append(proc)
+                if len(response_lst) > 20:
+                    await update.message.reply_text("\n".join(response_lst))
+                    response_lst.clear()
+
+            if len(response_lst) > 0:
+                await update.message.reply_text("\n".join(response_lst))
 
     @staticmethod
     async def kill_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        try:
-            process_id = int(context.args[0])
-            proc = psutil.Process(process_id)
-            proc.terminate()
-            await update.message.reply_text(f"Process {process_id} ({proc.name()}) terminated.")
-        except (psutil.NoSuchProcess, IndexError, ValueError):
-            await update.message.reply_text("Invalid process ID or process does not exist.")
+        process_ids = [int(i) for i in context.args]
+        for process_id in process_ids:
+            try:
+                proc = psutil.Process(process_id)
+                proc.terminate()
+                await update.message.reply_text(f"Process {process_id} ({proc.name()}) terminated.")
+            except (psutil.NoSuchProcess, IndexError, ValueError):
+                await update.message.reply_text("Invalid process ID or process does not exist.")
 
     @staticmethod
     async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -192,7 +233,7 @@ class SysTamer:
             "/browse - Start navigating your file system.\n"
             "/upload - Upload a file to the server.\n"
             "/system - Get system resource usage.\n"
-            "/processes - List running processes.\n"
+            "/processes - List running processes.\n" # todo u can filter
             "/kill <PID> - Kill a process by its PID.\n"
             "/screenshot - Take a screenshot and send it.\n"
         )
@@ -209,7 +250,18 @@ class SysTamer:
         entries = os.listdir(path)
         buttons = []
         self._browse_path_dict.clear()
+
+        # Add "Back" button to navigate to the parent directory if not at the root
+        if path != str(Path.home()):  # If we are not in the home directory
+            parent_directory = os.path.dirname(path)  # Get parent directory
+            parent_hashed = hashlib.md5(parent_directory.encode()).hexdigest()
+            self._browse_path_dict[parent_hashed] = parent_directory
+            buttons.append(InlineKeyboardButton("⬅️ Back", callback_data=f"cd {parent_hashed}"))
+
+
         for entry in entries:  # Limit the number of entries per message
+            if entry in SysTamer._SENSITIVE_FILES:  # todo note that all config.json will be excluded
+                continue  # Skip sensitive files
             full_path = os.path.join(path, entry)
             entry_hashed = hashlib.md5(full_path.encode()).hexdigest()
             self._browse_path_dict[entry_hashed] = full_path  # todo simplify remove above line
@@ -220,15 +272,17 @@ class SysTamer:
 
         return buttons
 
+    @check_for_permission
     async def browse(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         path = str(Path.home())  # Start from the home directory
         buttons = self.list_files_and_directories(path)
-
         keyboard = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]  # Group buttons in rows
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await update.message.reply_text('Choose a directory or file:', reply_markup=reply_markup)
 
+
+    @check_for_permission
     async def handle_navigation(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         # TODO if access is denied - send back a msg access is denied...
         query = update.callback_query
@@ -294,9 +348,11 @@ class SysTamer:
         except httpcore.ConnectTimeout:
             print("timeout - check connection")
         finally:
-            print("Shutting down application...")
-            await self._application.shutdown()
-
+            try:
+                print("Shutting down application...")
+                await self._application.shutdown()
+            except RuntimeError as exc:
+                pass  # ignore 'RuntimeError: This Application is still running!'
 
 async def main() -> NoReturn:
     conf = load_config("config.json")
@@ -305,7 +361,12 @@ async def main() -> NoReturn:
 
 
 if __name__ == '__main__':
-    asyncio.get_event_loop().run_until_complete(main())
+    try:
+        asyncio.get_event_loop().run_until_complete(main())
+    except KeyboardInterrupt:
+        pass
+    finally:
+        pass
 
 
 
