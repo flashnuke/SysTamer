@@ -122,8 +122,6 @@ class SysTamer:
 
     async def handle_file_upload(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         # todo config path cannot be sent - security
-        if not self._authorized:  # todo wrapper for each handler
-            return False
         if not os.path.exists(self._uploads_dir):
             os.makedirs(self._uploads_dir)
 
@@ -260,17 +258,17 @@ class SysTamer:
         # Add "Back" button to navigate to the parent directory if not at the root
         if path != str(Path.home()):  # If we are not in the home directory
             parent_directory = os.path.dirname(path)  # Get parent directory
-            parent_hashed = hashlib.md5(parent_directory.encode()).hexdigest()
-            self._browse_path_dict[parent_hashed] = parent_directory
-            buttons.append(InlineKeyboardButton("⬅️ Back", callback_data=f"cd {parent_hashed}"))
+            if os.path.isdir(parent_directory):  # Ensure the parent directory is valid
+                parent_hashed = hashlib.md5(parent_directory.encode()).hexdigest()
+                self._browse_path_dict[parent_hashed] = parent_directory
+                buttons.append(InlineKeyboardButton("⬅️ Back", callback_data=f"cd {parent_hashed}"))
 
-
-        for entry in entries:  # Limit the number of entries per message
-            if entry in SysTamer._SENSITIVE_FILES:  # todo note that all config.json will be excluded
-                continue  # Skip sensitive files
+        for entry in entries:
             full_path = os.path.join(path, entry)
             entry_hashed = hashlib.md5(full_path.encode()).hexdigest()
-            self._browse_path_dict[entry_hashed] = full_path  # todo simplify remove above line
+            self._browse_path_dict[entry_hashed] = full_path
+
+            # Ensure that it's a directory or file and not something like NTUSER.DAT
             if os.path.isdir(full_path):
                 buttons.append(InlineKeyboardButton(entry + '/', callback_data=f"cd {entry_hashed}"))
             else:
@@ -292,44 +290,68 @@ class SysTamer:
     async def handle_navigation(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         # TODO if access is denied - send back a msg access is denied...
         query = update.callback_query
-        command, hashed_path = query.data.split(' ', 1)
-        path = self._browse_path_dict[hashed_path]  # Map from the hashed path to the actual path
+        data = query.data.split(' ', 1)
+        command = data[0]  # The command is the first part (e.g., "cd", "file", "action")
 
-        if command == "cd":  # Navigate to directory
-            buttons = self.list_files_and_directories(path)
-            keyboard = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+        if command == "cd":  # Handle directory navigation
+            hashed_path = data[1]
+            path = self._browse_path_dict.get(hashed_path)
+            print(path)
 
-            await query.edit_message_text(text=f'Navigating to: {path}', reply_markup=reply_markup)
+            if path and os.path.isdir(path):  # Ensure the path is a valid directory
+                buttons = self.list_files_and_directories(path)
+                keyboard = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text(text=f'Navigating to: {path}', reply_markup=reply_markup)
+            else:
+                await query.edit_message_text(text="The directory is invalid or does not exist.")
 
         elif command == "file":  # File clicked, show "Download/Delete/Back" options
-            # Store file path for reference
-            context.user_data['selected_file'] = path
+            selected_file = self._browse_path_dict.get(data[1])
+            parent_directory = os.path.dirname(selected_file)
+            parent_hashed = hashlib.md5(parent_directory.encode()).hexdigest()
 
-            # Display action keypad
-            keyboard = [
-                [InlineKeyboardButton("Download", callback_data=f"action download")],
-                [InlineKeyboardButton("Delete", callback_data=f"action delete")],
-                [InlineKeyboardButton("⬅️ Back", callback_data=f"cd {hashed_path}")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(text=f"Choose an action for file: {path}", reply_markup=reply_markup)
+            # Store the parent directory in browse_path_dict
+            self._browse_path_dict[parent_hashed] = parent_directory
 
-        elif command == "action":  # Perform action (download or delete)
-            action_type = hashed_path  # Here, the second argument is 'download' or 'delete'
+            if selected_file and os.path.isfile(selected_file):  # Ensure it's a valid file
+                context.user_data['selected_file'] = selected_file
+
+                # Display action keypad
+                keyboard = [
+                    [InlineKeyboardButton("Download", callback_data="action download")],
+                    [InlineKeyboardButton("Delete", callback_data="action delete")],
+                    [InlineKeyboardButton("⬅️ Back", callback_data=f"cd {parent_hashed}")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text(text="Choose an action:", reply_markup=reply_markup)
+            else:
+                await query.edit_message_text(text="The file is invalid or does not exist.")
+                    # todo handle other errors here, Permission and general
+        elif command == "action":  # Handle file actions (download or delete)
+            action_type = data[1]  # This will be either 'download' or 'delete'
             selected_file = context.user_data.get('selected_file')
 
             if action_type == "download":
                 if selected_file:
-                    with open(selected_file, 'rb') as file:
-                        await query.message.reply_document(document=file)
+                    try:
+                        with open(selected_file, 'rb') as file:
+                            await query.message.reply_document(document=file)
+                    except Exception as e:
+                        await query.message.reply_text(f"Error: {str(e)}")
+
             elif action_type == "delete":
-                try:
-                    os.remove(selected_file)
-                    await query.edit_message_text(text=f"File '{selected_file}' has been deleted.")
-                except FileNotFoundError:
-                    await query.edit_message_text(text=f"File '{selected_file}' not found.")
-                    # todo handle other errors here, Permission and general
+                if selected_file:
+                    try:
+                        os.remove(selected_file)
+                        await query.edit_message_text(text=f"File '{selected_file}' has been deleted.")
+                    except FileNotFoundError:
+                        await query.edit_message_text(text=f"File '{selected_file}' not found.")
+                    except Exception as e:
+                        await query.edit_message_text(text=f"Error: {str(e)}")
+
+            else:
+                await query.edit_message_text(text="Invalid action selected.")
 
 
     def _register_command_handlers(self, application: telegram.ext.Application) -> None:
