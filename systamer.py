@@ -282,6 +282,7 @@ class SysTamer:
         buttons = self.list_files_and_directories(path)
         keyboard = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]  # Group buttons in rows
         reply_markup = InlineKeyboardMarkup(keyboard)
+        # todo add a "back" button here as well to close menu
 
         await update.message.reply_text('Choose a directory or file:', reply_markup=reply_markup)
 
@@ -296,7 +297,6 @@ class SysTamer:
         if command == "cd":  # Handle directory navigation
             hashed_path = data[1]
             path = self._browse_path_dict.get(hashed_path)
-            print(path)
 
             if path and os.path.isdir(path):  # Ensure the path is a valid directory
                 buttons = self.list_files_and_directories(path)
