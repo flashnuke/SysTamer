@@ -16,7 +16,7 @@ import nest_asyncio # todo dependencies
 import asyncio
 import psutil # todo dependencies
 from telegram.ext import CommandHandler
-import pyautogui
+import pyautogui # todo dependencies
 from io import BytesIO
 
 # Apply nest_asyncio to allow nested event loops
@@ -91,6 +91,12 @@ class SysTamer:
             return
 
         user_password = context.args[0]  # Get the provided password
+
+        # Delete the message containing the password
+        try: # todo refactor outside
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=update.message.message_id)
+        except telegram.error.BadRequest as e:
+            print(f"Error deleting message: {e}")
 
         # Check if the password is correct
         if user_password == PASSWORD:
@@ -287,18 +293,44 @@ class SysTamer:
         # TODO if access is denied - send back a msg access is denied...
         query = update.callback_query
         command, hashed_path = query.data.split(' ', 1)
-        path = self._browse_path_dict[hashed_path]  # todo if does not exist - exc?
+        path = self._browse_path_dict[hashed_path]  # Map from the hashed path to the actual path
 
-        if command == "cd": # todo not hardcoded?
+        if command == "cd":  # Navigate to directory
             buttons = self.list_files_and_directories(path)
             keyboard = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             await query.edit_message_text(text=f'Navigating to: {path}', reply_markup=reply_markup)
 
-        elif command == "file":
-            with open(path, 'rb') as file:
-                await query.message.reply_document(document=file)
+        elif command == "file":  # File clicked, show "Download/Delete/Back" options
+            # Store file path for reference
+            context.user_data['selected_file'] = path
+
+            # Display action keypad
+            keyboard = [
+                [InlineKeyboardButton("Download", callback_data=f"action download")],
+                [InlineKeyboardButton("Delete", callback_data=f"action delete")],
+                [InlineKeyboardButton("⬅️ Back", callback_data=f"cd {hashed_path}")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(text=f"Choose an action for file: {path}", reply_markup=reply_markup)
+
+        elif command == "action":  # Perform action (download or delete)
+            action_type = hashed_path  # Here, the second argument is 'download' or 'delete'
+            selected_file = context.user_data.get('selected_file')
+
+            if action_type == "download":
+                if selected_file:
+                    with open(selected_file, 'rb') as file:
+                        await query.message.reply_document(document=file)
+            elif action_type == "delete":
+                try:
+                    os.remove(selected_file)
+                    await query.edit_message_text(text=f"File '{selected_file}' has been deleted.")
+                except FileNotFoundError:
+                    await query.edit_message_text(text=f"File '{selected_file}' not found.")
+                    # todo handle other errors here, Permission and general
+
 
     def _register_command_handlers(self, application: telegram.ext.Application) -> None:
         application.add_handler(CommandHandler("start", self.start))  # todo int
