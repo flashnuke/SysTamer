@@ -1,28 +1,20 @@
-import json
-import time
-from pathlib import Path # todo dependencies?
 import os
-import contextlib
-from typing import NoReturn, Dict, Any, Callable
-import hashlib # todo dependencies?
+import json
+import psutil
+import hashlib
+import asyncio
 import httpcore
+import pyautogui
+import nest_asyncio
 import telegram.error
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup # todo dependencies
-from telegram import Update, Document, PhotoSize, Video, Audio, Voice, VideoNote
+
+from io import BytesIO
+from pathlib import Path
+from typing import NoReturn, Dict, Any
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler, CallbackQueryHandler
 
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
-import nest_asyncio # todo dependencies
-import asyncio
-import psutil # todo dependencies
-from telegram.ext import CommandHandler
-import pyautogui # todo dependencies
-from io import BytesIO
-
-# Apply nest_asyncio to allow nested event loops
 nest_asyncio.apply()
-
-# Replace 'YOUR_BOT_TOKEN' with your actual bot token
 
 PASSWORD = "mypassword"  # Set your password here
 
@@ -57,6 +49,16 @@ class SysTamer:
 
         return _impl
 
+    @staticmethod
+    async def delete_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        try:
+            await context.bot.delete_message(
+                chat_id=update.effective_chat.id,
+                message_id=update.effective_message.message_id
+            )
+        except telegram.error.BadRequest as e:
+            print(f"Error deleting message: {e}")
+
     def check_for_permission(func, *args, **kwargs):
         async def _impl(self, update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
             try:
@@ -64,14 +66,8 @@ class SysTamer:
             except PermissionError:
                 if update.effective_message:
                     await update.effective_message.reply_text("permission error")  # todo better msg
-                if update.callback_query: # todo export this outside and use for login as well?
-                    try:
-                        await context.bot.delete_message(
-                            chat_id=update.effective_chat.id,  # Get the chat ID
-                            message_id=update.effective_message.message_id  # Get the message ID
-                        )
-                    except telegram.error.BadRequest as e:
-                        print(f"Error deleting message: {e}")
+                if update.callback_query:  # todo export this outside and use for login as well?
+                    await SysTamer.delete_message(update, context)
         return _impl
 
     def __init__(self, json_conf: dict):
@@ -106,6 +102,16 @@ class SysTamer:
         else:
             # Incorrect password
             await update.message.reply_text("Incorrect password, please try again.")
+
+    async def logout(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if context.user_data.get("authenticated", False):
+            self.deauthenticate(context)
+        else:
+            # User is not authenticated
+            await update.message.reply_text("not logged in")  # todo better msg
+
+    def deauthenticate(self, context: ContextTypes.DEFAULT_TYPE):
+        context.user_data["authenticated"] = False
 
     @require_authentication
     async def send_screenshot(self, update, context):
@@ -240,6 +246,8 @@ class SysTamer:
             "/processes - List running processes.\n" # todo u can filter
             "/kill <PID> - Kill a process by its PID.\n"
             "/screenshot - Take a screenshot and send it.\n"
+            "/login <PASSWORD> - authenticate the session.\n"
+            "/logout - de-authenticate the session.\n"
         )
         await update.message.reply_text(welcome_message)
 
@@ -262,6 +270,7 @@ class SysTamer:
                 parent_hashed = hashlib.md5(parent_directory.encode()).hexdigest()
                 self._browse_path_dict[parent_hashed] = parent_directory
                 buttons.append(InlineKeyboardButton("⬅️ Back", callback_data=f"cd {parent_hashed}"))
+        buttons.append(InlineKeyboardButton("❌️ Close", callback_data=f"action close"))  # todo where is it located? bottom or top
 
         for entry in entries:
             full_path = os.path.join(path, entry)
@@ -351,6 +360,8 @@ class SysTamer:
                     except Exception as e:
                         await query.edit_message_text(text=f"Error: {str(e)}")
 
+            elif action_type == "close":
+                await SysTamer.delete_message(update, context)
             else:
                 await query.edit_message_text(text="Invalid action selected.")
 
@@ -364,6 +375,7 @@ class SysTamer:
         application.add_handler(CommandHandler("screenshot", self.send_screenshot))
         application.add_handler(CommandHandler("upload", self.upload_info))
         application.add_handler(CommandHandler("login", self.login))
+        application.add_handler(CommandHandler("logout", self.logout))
 
     def _register_message_handlers(self, application: telegram.ext.Application) -> None:
         application.add_handler(MessageHandler(filters.Document.ALL, self.handle_file_upload))
