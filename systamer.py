@@ -30,16 +30,14 @@ PASSWORD = "mypassword"  # Set your password here
 
 
 def load_config(conf_path: str) -> Dict[str, Any]:
-    # todo how did it load a nonexisting one? got to "self._bot_token = json_conf.get("bot_token", None)
-    # todo AttributeError: 'NoneType' object has no attribute 'get'"
     try:
         with open(conf_path, 'r') as file:
             data = json.load(file)
         return data
     except FileNotFoundError:
-        print(f"Config path not found -> {conf_path}")
+        print_error(f"Config path not found -> {conf_path}")  # todo throw here
     except json.JSONDecodeError:
-        print(f"Error decoding config -> {conf_path}.") # todo handle errors etc in a more controlled manner
+        print_error(f"Error decoding config -> {conf_path}.")  # todo handle errors etc in a more controlled manner
 
 class SysTamer:
     _SENSITIVE_FILES = ["config.json"]

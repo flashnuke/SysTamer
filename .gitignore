@@ -166,3 +166,4 @@ uploads
 uploads/
 uploads/*
 config.json
+/config.json
