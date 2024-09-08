@@ -283,7 +283,8 @@ class SysTamer:
         keyboard = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]  # Group buttons in rows
         reply_markup = InlineKeyboardMarkup(keyboard)
         # todo add a "back" button here as well to close menu
-
+        # todo handke telegram.error.NetworkError: httpx.ConnectError: [Errno 11001] getaddrinfo failed
+        # todo of NetworkError happened at where exactly?
         await update.message.reply_text('Choose a directory or file:', reply_markup=reply_markup)
 
 
