@@ -8,6 +8,11 @@ import pyautogui
 import nest_asyncio
 import telegram.error
 
+try:
+    from .misc import *
+except ImportError:
+    from misc import *
+
 from io import BytesIO
 from pathlib import Path
 from typing import NoReturn, Dict, Any
@@ -428,6 +433,10 @@ async def main() -> NoReturn:
 
 
 if __name__ == '__main__':
+    invalidate_print()
+    printf(f"\n{BANNER}\n"
+           f"Written by {BOLD}@flashnuke{RESET}")
+    printf(DELIM)
     try:
         asyncio.get_event_loop().run_until_complete(main())
     except KeyboardInterrupt:
@@ -435,20 +444,3 @@ if __name__ == '__main__':
     finally:
         pass
 
-
-
-RESET = '\033[0m'
-BOLD = '\033[1m'
-RED = '\033[31m'
-GREEN = '\033[32m'
-YELLOW = "\033[1;33m"
-BLUE = '\033[34m'
-s = f"""
-{GREEN}     _______.{RESET}____    ____  _______.{GREEN}___________.{RESET}    ___      .___  ___.  _______ .______      
-{GREEN}    /       |{RESET}\   \  /   / /       {GREEN}|           |{RESET}   /   \     |   \/   | |   ____||   _  \     
-{GREEN}   |   (----`{RESET} \   \/   / |   (----`{GREEN}---|  |----`{RESET}  /  ^  \    |  \  /  | |  |__   |  |_)  |    
-{GREEN}    \   \    {RESET}  \_    _/   \   \    {GREEN}   |  |     {RESET} /  /_\  \   |  |\/|  | |   __|  |      /     
-{GREEN}.----)   |   {RESET}    |  | .----)   |   {GREEN}   |  |     {RESET}/  _____  \  |  |  |  | |  |____ |  |\  \\
-{GREEN}|_______/    {RESET}    |__| |_______/    {GREEN}   |__|    {RESET}/__/     \__\ |__|  |__| |_______|| _| \._\\
-"""
-print(s)
