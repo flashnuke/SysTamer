@@ -30,7 +30,8 @@ PASSWORD = "mypassword"  # Set your password here
 
 
 def load_config(conf_path: str) -> Dict[str, Any]:
-    """Loads a JSON file and returns the data as a dictionary."""
+    # todo how did it load a nonexisting one? got to "self._bot_token = json_conf.get("bot_token", None)
+    # todo AttributeError: 'NoneType' object has no attribute 'get'"
     try:
         with open(conf_path, 'r') as file:
             data = json.load(file)
