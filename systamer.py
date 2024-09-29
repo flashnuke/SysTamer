@@ -1,5 +1,3 @@
-import os
-import json
 import psutil
 import hashlib
 import asyncio
@@ -15,7 +13,7 @@ except ImportError:
 
 from io import BytesIO
 from pathlib import Path
-from typing import NoReturn, Dict, Any
+from typing import NoReturn, Any, Callable, Awaitable
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler, CallbackQueryHandler
 
@@ -27,20 +25,12 @@ PASSWORD = "mypassword"  # Set your password here
 # TODO cmd delete chat and - yes
 # TODO cmd delete uploads - or not
 # TODO cmd "ls" uploads - or not
+# TODO .browseignore - docs
+# todo you can filter process by name - docs
 
-
-def load_config(conf_path: str) -> Dict[str, Any]:
-    try:
-        with open(conf_path, 'r') as file:
-            data = json.load(file)
-        return data
-    except FileNotFoundError:
-        print_error(f"Config path not found -> {conf_path}")  # todo throw here
-    except json.JSONDecodeError:
-        print_error(f"Error decoding config -> {conf_path}.")  # todo handle errors etc in a more controlled manner
 
 class SysTamer:
-    _SENSITIVE_FILES = ["config.json"]
+    _BROWSE_IGNORE_PATH = ".browseignore"
 
     def require_authentication(func, *args, **kwargs):
         async def _impl(self, update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
@@ -49,7 +39,7 @@ class SysTamer:
                 return await func(self, update, context, *args, **kwargs)
             else:
                 # User is not authenticated, prompt for password
-                await update.message.reply_text("please login /login <password>") # todo better msg
+                await update.message.reply_text("please login /login <password>")
 
         return _impl
 
@@ -69,22 +59,25 @@ class SysTamer:
                 return await func(self, update, context, *args, **kwargs)
             except PermissionError:
                 if update.effective_message:
-                    await update.effective_message.reply_text("permission error")  # todo better msg
-                if update.callback_query:  # todo export this outside and use for login as well?
+                    await update.effective_message.reply_text("No permissions for this action, try running as superuser.")
+                if update.callback_query:
                     await SysTamer.delete_message(update, context)
         return _impl
 
     def __init__(self, json_conf: dict):
         self._bot_token = json_conf.get("bot_token", None)
-        if not self._bot_token:  # todo export and handle in a config handler in a more generic manner
-            raise Exception("asdasdasd")
+        if not self._bot_token:
+            raise Exception("Bot token is missing")
+
+        self._timeout_duration = json_conf.get("timeout_duration", 10)
         self._uploads_dir = os.path.join(os.getcwd(), "uploads")
 
         self._application: telegram.ext.Application = self._build_app()
+
         self._browse_path_dict = dict()
+        self._ignored_paths = self.load_ignore_paths()
 
     async def login(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # todo remove msg with pass after
         # Check if the user provided a password with the /login command
         if len(context.args) == 0:
             await update.message.reply_text("Please provide a password. Usage: /login <password>")
@@ -93,10 +86,7 @@ class SysTamer:
         user_password = context.args[0]  # Get the provided password
 
         # Delete the message containing the password
-        try: # todo refactor outside
-            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=update.message.message_id)
-        except telegram.error.BadRequest as e:
-            print(f"Error deleting message: {e}")
+        await self.delete_message(update, context)
 
         # Check if the password is correct
         if user_password == PASSWORD:
@@ -112,26 +102,46 @@ class SysTamer:
             self.deauthenticate(context)
         else:
             # User is not authenticated
-            await update.message.reply_text("not logged in")  # todo better msg
+            await update.message.reply_text("Not logged in.")
 
     def deauthenticate(self, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["authenticated"] = False
 
+    def load_ignore_paths(self) -> set:
+        ignored_paths = set()
+        try:
+            with open(SysTamer._BROWSE_IGNORE_PATH, 'r') as file:
+                for line in file:
+                    line = line.strip()
+                    if line:  # Ignore empty lines
+                        # Add original path
+                        ignored_paths.add(line)
+                        # Convert to full absolute path and add to the set
+                        full_path = str(Path(line).resolve())
+                        ignored_paths.add(full_path)
+        except FileNotFoundError:
+            print_error(f"{SysTamer._BROWSE_IGNORE_PATH} was not loaded")
+        return ignored_paths
+
     @require_authentication
     async def send_screenshot(self, update, context):
-        # Take a screenshot
         screenshot = pyautogui.screenshot()
-
-        # Save the screenshot to a byte stream
         byte_io = BytesIO()
         screenshot.save(byte_io, 'PNG')
         byte_io.seek(0)
 
-        # Send the screenshot back
-        await update.message.reply_photo(photo=byte_io, write_timeout=30) # todo handle timeout exc? reply timeout to user
+        await self.reply_with_timeout(update, update.message.reply_photo, photo=byte_io)
+
+    async def reply_with_timeout(self, update: Update, async_reply_ptr: Callable[..., Awaitable[Any]], *args, **kwargs):
+        try:
+            await async_reply_ptr(*args, write_timeout=self._timeout_duration,
+                                  connect_timeout=self._timeout_duration, read_timeout=self._timeout_duration, **kwargs)
+        except telegram.error.TimedOut as exc:
+            await update.message.reply_text(f"Request timed out after {self._timeout_duration} seconds.")
+        except telegram.error.NetworkError as exc:
+            await update.message.reply_text(f"Network error occurred: {exc}. Please try again later.")
 
     async def handle_file_upload(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # todo config path cannot be sent - security
         if not os.path.exists(self._uploads_dir):
             os.makedirs(self._uploads_dir)
 
@@ -183,6 +193,36 @@ class SysTamer:
 
         else:
             await update.message.reply_text("No file or media was uploaded. Please try again.")
+
+    async def list_uploads(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        try:
+            if not os.path.exists(self._uploads_dir):
+                await update.message.reply_text("Upload directory does not exist.")
+                return
+
+            entries = os.listdir(self._uploads_dir)
+            if not entries:
+                await update.message.reply_text("Upload directory is empty.")
+                return
+
+            response_lines = []
+            for index, entry in enumerate(entries, start=1):
+                # Truncate the filename to 20 characters, including the extension
+                name, ext = os.path.splitext(entry)
+                max_name_length = 20 - len(ext)  # Calculate max length for the name part
+                if len(entry) > 20:
+                    if len(name) > max_name_length:
+                        name = name[:max_name_length - 3] + '...'  # Truncate and add '...' if needed
+
+                    entry = name + ext  # Reassemble the filename with the extension
+
+                response_lines.append(f"**{index}**. {entry}")
+
+            response_text = "\n".join(response_lines)
+            await update.message.reply_text(response_text, parse_mode='Markdown')
+
+        except Exception as e:
+            await update.message.reply_text(f"An error occurred: {str(e)}")
 
     @staticmethod
     async def system_resource_monitoring(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -241,22 +281,11 @@ class SysTamer:
 
     @staticmethod
     async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # todo for cmd in cmd list
-        welcome_message = (
-            "Welcome to the bot! Here are the commands you can use:\n\n"
-            "/browse - Start navigating your file system.\n"
-            "/upload - Upload a file to the server.\n"
-            "/system - Get system resource usage.\n"
-            "/processes - List running processes.\n" # todo u can filter
-            "/kill <PID> - Kill a process by its PID.\n"
-            "/screenshot - Take a screenshot and send it.\n"
-            "/login <PASSWORD> - authenticate the session.\n"
-            "/logout - de-authenticate the session.\n"
-        )
+        welcome_message = "Welcome to the bot! Here are the commands you can use:\n\n"
+        welcome_message += "\n".join([f"{cmd} - {desc}" for cmd, desc in COMMANDS_DICT.items()])
         await update.message.reply_text(welcome_message)
 
     async def upload_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # todo for cmd in cmd list
         upload_message = (
             f"Simply send a file, and it will be saved to -> {self._uploads_dir}"
         )
@@ -267,17 +296,11 @@ class SysTamer:
         buttons = []
         self._browse_path_dict.clear()
 
-        # Add "Back" button to navigate to the parent directory if not at the root
-        if path != str(Path.home()):  # If we are not in the home directory
-            parent_directory = os.path.dirname(path)  # Get parent directory
-            if os.path.isdir(parent_directory):  # Ensure the parent directory is valid
-                parent_hashed = hashlib.md5(parent_directory.encode()).hexdigest()
-                self._browse_path_dict[parent_hashed] = parent_directory
-                buttons.append(InlineKeyboardButton("⬅️ Back", callback_data=f"cd {parent_hashed}"))
-        buttons.append(InlineKeyboardButton("❌️ Close", callback_data=f"action close"))  # todo where is it located? bottom or top
-
         for entry in entries:
             full_path = os.path.join(path, entry)
+            if full_path in self._ignored_paths or str(Path(full_path).resolve()) in self._ignored_paths:
+                continue
+
             entry_hashed = hashlib.md5(full_path.encode()).hexdigest()
             self._browse_path_dict[entry_hashed] = full_path
 
@@ -287,7 +310,16 @@ class SysTamer:
             else:
                 buttons.append(InlineKeyboardButton(entry, callback_data=f"file {entry_hashed}"))
 
+        # Add "Back" button to navigate to the parent directory if not at the root
+        if path != str(Path.home()):  # If we are not in the home directory
+            parent_directory = os.path.dirname(path)  # Get parent directory
+            if os.path.isdir(parent_directory):  # Ensure the parent directory is valid
+                parent_hashed = hashlib.md5(parent_directory.encode()).hexdigest()
+                self._browse_path_dict[parent_hashed] = parent_directory
+                buttons.append(InlineKeyboardButton("⬅️ Back", callback_data=f"cd {parent_hashed}"))
+        buttons.append(InlineKeyboardButton("❌️ Close", callback_data=f"action close"))
         return buttons
+
 
     @check_for_permission
     async def browse(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -295,15 +327,10 @@ class SysTamer:
         buttons = self.list_files_and_directories(path)
         keyboard = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]  # Group buttons in rows
         reply_markup = InlineKeyboardMarkup(keyboard)
-        # todo add a "back" button here as well to close menu
-        # todo handke telegram.error.NetworkError: httpx.ConnectError: [Errno 11001] getaddrinfo failed
-        # todo of NetworkError happened at where exactly?
         await update.message.reply_text('Choose a directory or file:', reply_markup=reply_markup)
-
 
     @check_for_permission
     async def handle_navigation(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # TODO if access is denied - send back a msg access is denied...
         query = update.callback_query
         data = query.data.split(' ', 1)
         command = data[0]  # The command is the first part (e.g., "cd", "file", "action")
@@ -341,7 +368,6 @@ class SysTamer:
                 await query.edit_message_text(text="Choose an action:", reply_markup=reply_markup)
             else:
                 await query.edit_message_text(text="The file is invalid or does not exist.")
-                    # todo handle other errors here, Permission and general
         elif command == "action":  # Handle file actions (download or delete)
             action_type = data[1]  # This will be either 'download' or 'delete'
             selected_file = context.user_data.get('selected_file')
@@ -350,7 +376,8 @@ class SysTamer:
                 if selected_file:
                     try:
                         with open(selected_file, 'rb') as file:
-                            await query.message.reply_document(document=file)
+                            await self.reply_with_timeout(update, query.message.reply_document, document=file)
+
                     except Exception as e:
                         await query.message.reply_text(f"Error: {str(e)}")
 
@@ -372,12 +399,14 @@ class SysTamer:
 
     def _register_command_handlers(self, application: telegram.ext.Application) -> None:
         application.add_handler(CommandHandler("start", self.start))  # todo int
+        application.add_handler(CommandHandler("help", self.start))
         application.add_handler(CommandHandler("browse", self.browse))
         application.add_handler(CommandHandler("system", self.system_resource_monitoring))
         application.add_handler(CommandHandler("processes", self.list_processes))
         application.add_handler(CommandHandler("kill", self.kill_process))
         application.add_handler(CommandHandler("screenshot", self.send_screenshot))
         application.add_handler(CommandHandler("upload", self.upload_info))
+        application.add_handler(CommandHandler("list_uploads", self.list_uploads))
         application.add_handler(CommandHandler("login", self.login))
         application.add_handler(CommandHandler("logout", self.logout))
 
