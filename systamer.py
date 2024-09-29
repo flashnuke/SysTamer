@@ -2,7 +2,6 @@ import psutil
 import hashlib
 import asyncio
 import httpcore
-import pyautogui
 import nest_asyncio
 import telegram.error
 
@@ -11,8 +10,27 @@ try:
 except ImportError:
     from misc import *
 
-if not is_linux():
-    from io import BytesIO
+import mss
+from io import BytesIO
+from PIL import Image
+
+from telegram import Update
+from telegram.ext import ContextTypes
+
+async def send_screenshot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Take a screenshot using mss
+    with mss.mss() as sct:
+        screenshot = sct.grab(sct.monitors[0])  # Capture the full screen
+
+        # Convert the screenshot to an Image object
+        img = Image.frombytes("RGB", (screenshot.width, screenshot.height), screenshot.rgb)
+
+        # Save the screenshot to a byte stream
+        byte_io = BytesIO()
+        img.save(byte_io, 'PNG')
+        byte_io.seek(0)
+
+        await self.reply_with_timeout(update, update.message.reply_photo, photo=byte_io)
 
 from pathlib import Path
 from typing import NoReturn, Any, Callable, Awaitable
@@ -131,17 +149,20 @@ class SysTamer:
         return ignored_paths
 
     @require_authentication
-    async def send_screenshot(self, update, context):
-        if is_linux():
-            await update.message.reply_text(f"Not supported on Linux platforms.")
-            return
+    async def send_screenshot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        # Take a screenshot using mss
+        with mss.mss() as sct:
+            screenshot = sct.grab(sct.monitors[0])  # Capture the full screen
 
-        screenshot = pyautogui.screenshot()
-        byte_io = BytesIO()
-        screenshot.save(byte_io, 'PNG')
-        byte_io.seek(0)
+            # Convert the screenshot to an Image object
+            img = Image.frombytes("RGB", (screenshot.width, screenshot.height), screenshot.rgb)
 
-        await self.reply_with_timeout(update, update.message.reply_photo, photo=byte_io)
+            # Save the screenshot to a byte stream
+            byte_io = BytesIO()
+            img.save(byte_io, 'PNG')
+            byte_io.seek(0)
+
+            await self.reply_with_timeout(update, update.message.reply_photo, photo=byte_io)
 
     async def reply_with_timeout(self, update: Update, async_reply_ptr: Callable[..., Awaitable[Any]], *args, **kwargs):
         try:
