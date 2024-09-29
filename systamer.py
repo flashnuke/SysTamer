@@ -462,6 +462,8 @@ class SysTamer:
         return application
 
     async def run_forever(self) -> NoReturn:
+        # TODO handle "telegram.error.Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running"
+        # TODO ^ but where?
         try: # todo print info errors etc
             print("Initializing application...")
             await self._application.initialize()
