@@ -1,4 +1,6 @@
 import json
+import platform
+
 from .output_manager import *
 from typing import Any, Dict
 
@@ -13,6 +15,10 @@ COMMANDS_DICT = {
     "/login <PASSWORD>": "Authenticate the session.",
     "/logout": "De-authenticate the session."
 }
+
+
+def is_linux():
+    return platform.system() == "Linux"
 
 
 def load_config(conf_path: str) -> Dict[str, Any]:

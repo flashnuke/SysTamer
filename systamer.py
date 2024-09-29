@@ -11,7 +11,9 @@ try:
 except ImportError:
     from misc import *
 
-from io import BytesIO
+if not is_linux():
+    from io import BytesIO
+
 from pathlib import Path
 from typing import NoReturn, Any, Callable, Awaitable
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -27,7 +29,12 @@ PASSWORD = "mypassword"  # Set your password here
 # TODO cmd "ls" uploads - or not
 # TODO .browseignore - docs
 # todo you can filter process by name - docs
+# todo screenshot not supported on linux - tkinter... or find another way to do so
 
+# todo add setup
+# todo add empty config
+# todo add x permissions on linux and shebang
+# todo linux notes requirements NOTE: """You must install tkinter on Linux to use MouseInfo. Run the following: sudo apt-get install python3-tk python3-dev"""
 
 class SysTamer:
     _BROWSE_IGNORE_PATH = ".browseignore"
@@ -125,6 +132,10 @@ class SysTamer:
 
     @require_authentication
     async def send_screenshot(self, update, context):
+        if is_linux():
+            await update.message.reply_text(f"Not supported on Linux platforms.")
+            return
+
         screenshot = pyautogui.screenshot()
         byte_io = BytesIO()
         screenshot.save(byte_io, 'PNG')
