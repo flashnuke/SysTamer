@@ -54,7 +54,8 @@ def log_action(func, *args, **kwargs):
         parts = message_text.split()
         command_name = parts[0] if parts else ""
         command_args = parts[1:] if len(parts) > 1 else []
-        print_cmd(f"cmd [{command_name}] args [{','.join(command_args)}]")
+        print_cmd(f"user {SysTamer.get_update_username(update)}\t|\tcmd {command_name}" +
+                  (f"\t|\targs {','.join(command_args)}" if command_args else ''))
         return await func(self, update, context, *args, **kwargs)
 
     return _impl
@@ -63,26 +64,6 @@ def log_action(func, *args, **kwargs):
 class SysTamer:
     _BROWSE_IGNORE_PATH = ".browseignore"
     _PASSWORD = str()
-
-    async def delete_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        try:
-            await context.bot.delete_message(
-                chat_id=update.effective_chat.id,
-                message_id=update.effective_message.message_id
-            )
-        except telegram.error.BadRequest as e:
-            print_error(f"Error deleting message: {e}")
-
-    def check_for_permission(func, *args, **kwargs):
-        async def _impl(self, update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-            try:
-                return await func(self, update, context, *args, **kwargs)
-            except PermissionError:
-                if update.effective_message:
-                    await update.effective_message.reply_text("No permissions for this action, try running as superuser.")
-                if update.callback_query:
-                    await SysTamer.delete_message(update, context)
-        return _impl
 
     def __init__(self, json_conf: dict):
         self._bot_token = json_conf.get("bot_token", None)
@@ -104,6 +85,30 @@ class SysTamer:
 
         self._browse_path_dict = dict()
         self._ignored_paths = SysTamer.load_ignore_paths()
+
+    async def delete_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        try:
+            await context.bot.delete_message(
+                chat_id=update.effective_chat.id,
+                message_id=update.effective_message.message_id
+            )
+        except telegram.error.BadRequest as e:
+            print_error(f"Error deleting message: {e}")
+
+    def check_for_permission(func, *args, **kwargs):
+        async def _impl(self, update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+            try:
+                return await func(self, update, context, *args, **kwargs)
+            except PermissionError:
+                if update.effective_message:
+                    await update.effective_message.reply_text("No permissions for this action, try running as superuser.")
+                if update.callback_query:
+                    await SysTamer.delete_message(update, context)
+        return _impl
+
+    @staticmethod
+    def get_update_username(update: Update) -> str:
+        return update.effective_user.username if update.effective_user.username else update.effective_user.id
 
     @staticmethod
     def should_authenticate():
@@ -161,7 +166,8 @@ class SysTamer:
             # User is not authenticated
             await update.message.reply_text("Not logged in.")
 
-    def deauthenticate(self, context: ContextTypes.DEFAULT_TYPE):
+    @staticmethod
+    def deauthenticate(context: ContextTypes.DEFAULT_TYPE):
         context.user_data["authenticated"] = False
 
     @log_action
@@ -246,7 +252,7 @@ class SysTamer:
         else:
             await update.message.reply_text("No file or media was uploaded. Please try again.")
 
-        print_cmd(f"uploaded {file_path}")
+        print_cmd(f"user {SysTamer.get_update_username(update)}\t|\tuploaded {file_path}")
 
     @log_action
     @require_authentication
@@ -340,7 +346,7 @@ class SysTamer:
 
     @log_action
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        welcome_message = "Welcome to the bot! Here are the commands you can use:\n\n"
+        welcome_message = "Commands list:\n\n"
         welcome_message += "\n".join([f"{cmd} - {desc}" for cmd, desc in COMMANDS_DICT.items()])
         await update.message.reply_text(welcome_message)
 
@@ -397,7 +403,7 @@ class SysTamer:
         query = update.callback_query
         data = query.data.split(' ', 1)
         command = data[0]  # The command is the first part (e.g., "cd", "file", "action")
-        print_cmd(f"handle_navigation received cmd -> {data} {'(' + self._browse_path_dict.get(data[1]) + ')' if len(data) >= 1 and data[1] in self._browse_path_dict else ''}")
+        print_cmd(f"user {SysTamer.get_update_username(update)}\t|\thandle_navigation received cmd -> {' '.join(data)}" + ('\t|\t(' + self._browse_path_dict.get(data[1]) + ')' if len(data) >= 1 and data[1] in self._browse_path_dict else ''))
 
         if command == "cd":  # Handle directory navigation
             hashed_path = data[1]
