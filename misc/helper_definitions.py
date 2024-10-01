@@ -2,6 +2,7 @@ import json
 
 from .output_manager import *
 from typing import Any, Dict
+from pathlib import Path
 
 COMMANDS_DICT = {
     "/browse": "Start navigating your file system.",
@@ -16,7 +17,7 @@ COMMANDS_DICT = {
 }
 
 
-def load_config(conf_path: str) -> Dict[str, Any]:
+def load_config(conf_path: Path) -> Dict[str, Any]:
     try:
         with open(conf_path, 'r') as file:
             data = json.load(file)

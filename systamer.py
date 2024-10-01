@@ -6,7 +6,7 @@ import nest_asyncio
 import telegram.error
 
 try:
-    from .misc import *
+    from misc import *
 except ImportError:
     from misc import *
 
@@ -465,31 +465,33 @@ class SysTamer:
         # TODO handle "telegram.error.Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running"
         # TODO ^ but where?
         try: # todo print info errors etc
-            print("Initializing application...")
+            printf("Initializing application...")
             await self._application.initialize()
-            print("Starting application...")
+            printf("Starting application...")
             await self._application.start()
-            print("Starting updater polling...")
+            printf("Starting updater polling...")
             await self._application.updater.start_polling()
             await asyncio.Event().wait()
         except KeyboardInterrupt:  # todo verify if needed
-            print("Stopping updater polling...")
+            printf("Stopping updater polling...")
             await self._application.updater.stop()
-            print("Stopping application...")
+            printf("Stopping application...")
             await self._application.stop()
         except telegram.error.InvalidToken:
-            print("bad token")
+            printf("bad token")
         except httpcore.ConnectTimeout:
-            print("timeout - check connection")
+            printf("timeout - check connection")
         finally:
             try:
-                print("Shutting down application...")
+                printf("Shutting down application...")
                 await self._application.shutdown()
             except RuntimeError as exc:
                 pass  # ignore 'RuntimeError: This Application is still running!'
 
 async def main() -> NoReturn:
-    conf = load_config("config.json")
+    config_path = Path(__file__).resolve().parent / "config.json"
+    printf(config_path)
+    conf = load_config(config_path)
     tamer = SysTamer(conf)
     await tamer.run_forever()
 
