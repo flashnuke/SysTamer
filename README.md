@@ -19,7 +19,7 @@ SysTamer is a Telegram bot that allows you to remotely monitor and control your 
 * Telegram Bot API Token (obtain from BotFather)
 
 ### Obtaining a Telegram bot token
-This is a one-time process takes 1 minute. Start a chat with [@BotFather](https://core.telegram.org/bots/faq#how-do-i-create-a-bot) on telegram and obtain the bot token.
+This is a one-time process that takes less than 1 minute. Start a chat with [@BotFather](https://core.telegram.org/bots/faq#how-do-i-create-a-bot) on telegram and obtain the bot token.
 </br>
 After obtaining the bot token and cloning the repository, set the token in the `config.json` file:
 
@@ -34,16 +34,6 @@ The initial config leaves the password field empty - meaning no authentication w
 Otherwise, refer to the `/login <password>` command.
 
 ## Installation & Usage
-#### Installing on the system
- # TODO 
-```bash
-git clone https://github.com/flashnuke/wifi-deauth.git
-pip3 install .
-systamer -i <iface>
-```
-
-#### Running without installing 
- # TODO CHECK
 ```bash
 git clone https://github.com/flashnuke/SysTamer.git
 pip3 install -r requirements.txt # install requirements manually
@@ -52,8 +42,8 @@ python3 systamer.py
 ```
 
 ### Interact via Telegram
-* Start: /start or /help to get the list of commands.
-* Authenticate: /login <password> to authenticate yourself.
+* Start: `/start` or `/help` to get the list of commands.
+* Authenticate: `/login <password>` to authenticate yourself.
 * The default password is set in the script (PASSWORD variable). Change it before running. # TODO 
 * Use Commands: After authentication, you can use all available commands.
 
