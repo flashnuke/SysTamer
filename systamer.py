@@ -14,32 +14,12 @@ import mss
 from io import BytesIO
 from PIL import Image
 
-from telegram import Update
-from telegram.ext import ContextTypes
-
-async def send_screenshot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Take a screenshot using mss
-    with mss.mss() as sct:
-        screenshot = sct.grab(sct.monitors[0])  # Capture the full screen
-
-        # Convert the screenshot to an Image object
-        img = Image.frombytes("RGB", (screenshot.width, screenshot.height), screenshot.rgb)
-
-        # Save the screenshot to a byte stream
-        byte_io = BytesIO()
-        img.save(byte_io, 'PNG')
-        byte_io.seek(0)
-
-        await self.reply_with_timeout(update, update.message.reply_photo, photo=byte_io)
-
 from pathlib import Path
 from typing import NoReturn, Any, Callable, Awaitable
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler, CallbackQueryHandler
 
 nest_asyncio.apply()
-
-PASSWORD = "mypassword"  # Set your password here
 
 # TODO challenge - if you can find the pass let me know (via commands, etc...)
 # TODO cmd delete chat and - yes
@@ -54,12 +34,14 @@ PASSWORD = "mypassword"  # Set your password here
 # todo add x permissions on linux and shebang
 # todo linux notes requirements NOTE: """You must install tkinter on Linux to use MouseInfo. Run the following: sudo apt-get install python3-tk python3-dev"""
 
+
 class SysTamer:
     _BROWSE_IGNORE_PATH = ".browseignore"
+    _PASSWORD = str()
 
     def require_authentication(func, *args, **kwargs):
         async def _impl(self, update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-            if context.user_data.get("authenticated", False):
+            if context.user_data.get("authenticated", False) or not SysTamer.should_authenticate():
                 # User is authenticated, proceed with the function
                 return await func(self, update, context, *args, **kwargs)
             else:
@@ -94,15 +76,40 @@ class SysTamer:
         if not self._bot_token:
             raise Exception("Bot token is missing")
 
+        _PASSWORD = json_conf.get("password", str())
+
         self._timeout_duration = json_conf.get("timeout_duration", 10)
         self._uploads_dir = os.path.join(os.getcwd(), "uploads")
 
         self._application: telegram.ext.Application = self._build_app()
 
         self._browse_path_dict = dict()
-        self._ignored_paths = self.load_ignore_paths()
+        self._ignored_paths = SysTamer.load_ignore_paths()
+
+    @staticmethod
+    def should_authenticate():
+        return len(SysTamer._PASSWORD) > 0
+
+    @staticmethod
+    def load_ignore_paths() -> set:
+        ignored_paths = set()
+        try:
+            with open(SysTamer._BROWSE_IGNORE_PATH, 'r') as file:
+                for line in file:
+                    line = line.strip()
+                    if line:  # Ignore empty lines
+                        ignored_paths.add(line)
+                        full_path = str(Path(line).resolve())
+                        ignored_paths.add(full_path)
+        except FileNotFoundError:
+            print_error(f"{SysTamer._BROWSE_IGNORE_PATH} was not loaded")
+        return ignored_paths
 
     async def login(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not self.should_authenticate():
+            await update.message.reply_text("Authentication is not required.")
+            return
+
         # Check if the user provided a password with the /login command
         if len(context.args) == 0:
             await update.message.reply_text("Please provide a password. Usage: /login <password>")
@@ -114,7 +121,7 @@ class SysTamer:
         await self.delete_message(update, context)
 
         # Check if the password is correct
-        if user_password == PASSWORD:
+        if user_password == SysTamer._PASSWORD:
             # Correct password, authenticate the user
             context.user_data["authenticated"] = True
             await update.message.reply_text("Password accepted! You are now authenticated.")
@@ -123,6 +130,9 @@ class SysTamer:
             await update.message.reply_text("Incorrect password, please try again.")
 
     async def logout(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not self.should_authenticate():
+            await update.message.reply_text("Cannot logout an authenticated session.")
+            return
         if context.user_data.get("authenticated", False):
             self.deauthenticate(context)
         else:
@@ -131,22 +141,6 @@ class SysTamer:
 
     def deauthenticate(self, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["authenticated"] = False
-
-    def load_ignore_paths(self) -> set:
-        ignored_paths = set()
-        try:
-            with open(SysTamer._BROWSE_IGNORE_PATH, 'r') as file:
-                for line in file:
-                    line = line.strip()
-                    if line:  # Ignore empty lines
-                        # Add original path
-                        ignored_paths.add(line)
-                        # Convert to full absolute path and add to the set
-                        full_path = str(Path(line).resolve())
-                        ignored_paths.add(full_path)
-        except FileNotFoundError:
-            print_error(f"{SysTamer._BROWSE_IGNORE_PATH} was not loaded")
-        return ignored_paths
 
     @require_authentication
     async def send_screenshot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
