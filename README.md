@@ -1,5 +1,5 @@
 # SysTamer
-![image](https://github.com/user-attachments/assets/3b53c7e7-0ea1-48b3-993c-7c0d36bb62e9)
+![image](https://github.com/user-attachments/assets/34ea1223-1d90-4238-9536-a8cd74e964b9)
 
 ## Introduction
 
