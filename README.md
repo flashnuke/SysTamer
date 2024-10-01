@@ -64,10 +64,10 @@ python3 systamer.py
 
 
 ## Troubleshooting
-Conflict Errors: If you encounter telegram.error.Conflict, ensure only one instance of the bot is running (per token)
-Timeouts: If requests time out, check your internet connection or adjust the timeout_duration.
-Invalid Token: Double-check your Telegram Bot API token in the config.json file.
-Permissions: Run the script with appropriate permissions (sudo, administrator...) if you face PermissionError.
+* Conflict Errors: If you encounter telegram.error.Conflict, ensure only one instance of the bot is running (per token)
+* Timeouts: If requests time out, check your internet connection or adjust the timeout_duration.
+* Invalid Token: Double-check your Telegram Bot API token in the config.json file.
+* Permissions: Run the script with appropriate permissions (sudo, administrator...) if you face PermissionError.
 
 ## Legal Disclaimer
 This software is intended for personal use on your own systems. Unauthorized access to computer systems is illegal. The developers assume no liability and are not responsible for any misuse or damage caused by this program.
