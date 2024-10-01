@@ -352,7 +352,6 @@ class SysTamer:
         )
         await update.message.reply_text(upload_message)
 
-    @require_authentication
     def list_files_and_directories(self, path: str):
         entries = os.listdir(path)
         buttons = []
@@ -457,10 +456,9 @@ class SysTamer:
                         await query.edit_message_text(text=f"Error: {str(e)}")
 
             elif action_type == "close":
-                await SysTamer.delete_message(update, context)
+                await self.delete_message(update, context)
             else:
                 await query.edit_message_text(text="Invalid action selected.")
-
 
     def _register_command_handlers(self, application: telegram.ext.Application) -> None:
         application.add_handler(CommandHandler("start", self.start))
