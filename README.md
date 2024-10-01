@@ -37,8 +37,8 @@ Otherwise, refer to the `/login <password>` command.
 ## Installation & Usage
 ```bash
 git clone https://github.com/flashnuke/SysTamer.git
-pip3 install -r requirements.txt # install requirements manually
 cd SysTamer
+pip3 install -r requirements.txt # install requirements manually
 python3 systamer.py
 ```
 
@@ -50,17 +50,17 @@ python3 systamer.py
 
 ### Commands
 | Command | Description |
-|----------|---------------|
-| /start  /help   | Display the help message with available commands     |
+|-------------------------|---------------|
+| /start </br> /help      | Display the help message with available commands     |
 | /login `<password> `    | Authenticate with the bot. Uses the password as set in `config.json`   |
-| /logout   | Logout from the bot     |
-| /system     | Get system resource usage (CPU, memory, disk)   |
+| /logout                 | Logout from the bot     |
+| /system                 | Get system resource usage (CPU, memory, disk)   |
 | /processes `[filter]`   | List running processes. Optionally filter by process name or PID. </br> You can filter processes by name. For example: `/processes chrome`     |
-| /kill `<pid>`    | Terminate a process by its PID   |
-| /screenshot   | Capture and receive a screenshot of the system’s primary monitor     |
-| /browse     | Browse and manage files on the system (Paths under `.browseignore` will not be displayed)   |
-| /upload     | Instructions on how to upload files   |
-| /list_uploads     | List files you’ve uploaded via Telegram   |
+| /kill `<pid>`           | Terminate a process by its PID   |
+| /screenshot             | Capture and receive a screenshot of the system’s primary monitor     |
+| /browse                 | Browse and manage files on the system (Paths under `.browseignore` will not be displayed)   |
+| /upload                 | Instructions on how to upload files   |
+| /list_uploads           | List files you’ve uploaded via Telegram   |
 
 
 ## Troubleshooting
