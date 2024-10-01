@@ -44,8 +44,7 @@ python3 systamer.py
 
 ### Interact via Telegram
 * Start: `/start` or `/help` to get the list of commands.
-* Authenticate: `/login <password>` to authenticate yourself.
-* The default password is set in the script (PASSWORD variable). Change it before running. # TODO 
+* Authenticate: `/login <password>` to authenticate yourself (if a password was [set up](https://github.com/flashnuke/SysTamer?tab=readme-ov-file#setting-up-configjson)).
 * Use Commands: After authentication, you can use all available commands.
 
 ### Commands
