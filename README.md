@@ -1,5 +1,7 @@
 # SysTamer
 ![image](https://github.com/user-attachments/assets/34ea1223-1d90-4238-9536-a8cd74e964b9)
+<img src="https://github.com/user-attachments/assets/34ea1223-1d90-4238-9536-a8cd74e964b9">
+
 
 ## Introduction
 
