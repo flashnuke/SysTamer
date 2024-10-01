@@ -43,10 +43,6 @@ def print_info(text, end="\n"):
     printf(f"[{BOLD}{BLUE}*{RESET}] {text}", end=end)
 
 
-def print_input(text):
-    return input(printf(f"[{BOLD}{GREEN}<{RESET}] {text} "))
-
-
 def print_cmd(text):
     printf(f"[{BOLD}{GREEN}>{RESET}] {text}")
 

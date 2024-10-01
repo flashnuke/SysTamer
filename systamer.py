@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import psutil
 import hashlib
 import asyncio
@@ -21,44 +23,55 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTyp
 
 nest_asyncio.apply()
 
-# TODO challenge - if you can find the pass let me know (via commands, etc...)
-# TODO cmd delete chat and - yes
-# TODO cmd delete uploads - or not
-# TODO cmd "ls" uploads - or not
-# TODO .browseignore - docs
-# todo you can filter process by name - docs
-# todo screenshot not supported on linux - tkinter... or find another way to do so
 
-# todo add setup
-# todo add empty config
-# todo add x permissions on linux and shebang
-# todo linux notes requirements NOTE: """You must install tkinter on Linux to use MouseInfo. Run the following: sudo apt-get install python3-tk python3-dev"""
+#   --------------------------------------------------------------------------------------------------------------------
+#   ....................................................................................................................
+#   .............._______.____    ____  _______.___________.    ___      .___  ___.  _______ .______....................
+#   ............./       |\   \  /   / /       |           |   /   \     |   \/   | |   ____||   _  \...................
+#   ............|   (----` \   \/   / |   (----`---|  |----`  /  ^  \    |  \  /  | |  |__   |  |_)  |..................
+#   .............\   \      \_    _/   \   \       |  |      /  /_\  \   |  |\/|  | |   __|  |      /...................
+#   ..........----)   |       |  | .----)   |      |  |     /  _____  \  |  |  |  | |  |____ |  |\  \...................
+#   .........|_______/        |__| |_______/       |__|    /__/     \__\ |__|  |__| |_______|| _| \._\..................
+#   ....................................................................................................................
+#   Ⓒ by https://github.com/flashnuke Ⓒ................................................................................
+#   --------------------------------------------------------------------------------------------------------------------
+
+def require_authentication(func, *args, **kwargs):
+    async def _impl(self, update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        if context.user_data.get("authenticated", False) or not SysTamer.should_authenticate():
+            # User is authenticated, proceed with the function
+            return await func(self, update, context, *args, **kwargs)
+        else:
+            # User is not authenticated, prompt for password
+            await update.message.reply_text("please login /login <password>")
+
+    return _impl
+
+
+def log_action(func, *args, **kwargs):
+    async def _impl(self, update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        message_text = update.message.text  # This will contain the full command, e.g., "/start arg1 arg2"
+        parts = message_text.split()
+        command_name = parts[0] if parts else ""
+        command_args = parts[1:] if len(parts) > 1 else []
+        print_cmd(f"cmd [{command_name}] args [{','.join(command_args)}]")
+        return await func(self, update, context, *args, **kwargs)
+
+    return _impl
 
 
 class SysTamer:
     _BROWSE_IGNORE_PATH = ".browseignore"
     _PASSWORD = str()
 
-    def require_authentication(func, *args, **kwargs):
-        async def _impl(self, update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-            if context.user_data.get("authenticated", False) or not SysTamer.should_authenticate():
-                # User is authenticated, proceed with the function
-                return await func(self, update, context, *args, **kwargs)
-            else:
-                # User is not authenticated, prompt for password
-                await update.message.reply_text("please login /login <password>")
-
-        return _impl
-
-    @staticmethod
-    async def delete_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def delete_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             await context.bot.delete_message(
                 chat_id=update.effective_chat.id,
                 message_id=update.effective_message.message_id
             )
         except telegram.error.BadRequest as e:
-            print(f"Error deleting message: {e}")
+            print_error(f"Error deleting message: {e}")
 
     def check_for_permission(func, *args, **kwargs):
         async def _impl(self, update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
@@ -73,10 +86,16 @@ class SysTamer:
 
     def __init__(self, json_conf: dict):
         self._bot_token = json_conf.get("bot_token", None)
-        if not self._bot_token:
+        if self._bot_token:
+            print_info(f"Bot token was set to -> {BOLD}{self._bot_token}{RESET}")
+        else:
             raise Exception("Bot token is missing")
 
-        _PASSWORD = json_conf.get("password", str())
+        SysTamer._PASSWORD = json_conf.get("password", str())
+        if SysTamer._PASSWORD:
+            print_info(f"Password set to -> {BOLD}{SysTamer._PASSWORD}{RESET}")
+        else:
+            print_info("No password was set, running an unauthenticated session...")
 
         self._timeout_duration = json_conf.get("timeout_duration", 10)
         self._uploads_dir = os.path.join(os.getcwd(), "uploads")
@@ -103,8 +122,10 @@ class SysTamer:
                         ignored_paths.add(full_path)
         except FileNotFoundError:
             print_error(f"{SysTamer._BROWSE_IGNORE_PATH} was not loaded")
+        print_info(f"Loaded `/browse` ignore paths from -> {BOLD}{SysTamer._BROWSE_IGNORE_PATH}{RESET}")
         return ignored_paths
 
+    @log_action
     async def login(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not self.should_authenticate():
             await update.message.reply_text("Authentication is not required.")
@@ -129,6 +150,7 @@ class SysTamer:
             # Incorrect password
             await update.message.reply_text("Incorrect password, please try again.")
 
+    @log_action
     async def logout(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not self.should_authenticate():
             await update.message.reply_text("Cannot logout an authenticated session.")
@@ -142,16 +164,18 @@ class SysTamer:
     def deauthenticate(self, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["authenticated"] = False
 
+    @log_action
     @require_authentication
     async def send_screenshot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # Take a screenshot using mss
         with mss.mss() as sct:
             screenshot = sct.grab(sct.monitors[0])  # Capture the full screen
 
-            # Convert the screenshot to an Image object
             img = Image.frombytes("RGB", (screenshot.width, screenshot.height), screenshot.rgb)
 
-            # Save the screenshot to a byte stream
+            max_dimension = 4096
+            if img.width > max_dimension or img.height > max_dimension:
+                img.thumbnail((max_dimension, max_dimension))
+
             byte_io = BytesIO()
             img.save(byte_io, 'PNG')
             byte_io.seek(0)
@@ -167,9 +191,11 @@ class SysTamer:
         except telegram.error.NetworkError as exc:
             await update.message.reply_text(f"Network error occurred: {exc}. Please try again later.")
 
+    @require_authentication
     async def handle_file_upload(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not os.path.exists(self._uploads_dir):
             os.makedirs(self._uploads_dir)
+        file_path = str()
 
         if update.message.document:
             file = await update.message.document.get_file()
@@ -220,6 +246,10 @@ class SysTamer:
         else:
             await update.message.reply_text("No file or media was uploaded. Please try again.")
 
+        print_cmd(f"uploaded {file_path}")
+
+    @log_action
+    @require_authentication
     async def list_uploads(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             if not os.path.exists(self._uploads_dir):
@@ -250,8 +280,9 @@ class SysTamer:
         except Exception as e:
             await update.message.reply_text(f"An error occurred: {str(e)}")
 
-    @staticmethod
-    async def system_resource_monitoring(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    @log_action
+    @require_authentication
+    async def system_resource_monitoring(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         cpu_usage = psutil.cpu_percent(interval=1)
         memory_info = psutil.virtual_memory()
         disk_usage = psutil.disk_usage('/')
@@ -264,8 +295,9 @@ class SysTamer:
 
         await update.message.reply_text(response)
 
-    @staticmethod
-    async def list_processes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    @log_action
+    @require_authentication
+    async def list_processes(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         processes = []
         args_lower = [i.lower() for i in context.args]
         for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
@@ -294,8 +326,9 @@ class SysTamer:
             if len(response_lst) > 0:
                 await update.message.reply_text("\n".join(response_lst))
 
-    @staticmethod
-    async def kill_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    @log_action
+    @require_authentication
+    async def kill_process(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         process_ids = [int(i) for i in context.args]
         for process_id in process_ids:
             try:
@@ -305,18 +338,21 @@ class SysTamer:
             except (psutil.NoSuchProcess, IndexError, ValueError):
                 await update.message.reply_text("Invalid process ID or process does not exist.")
 
-    @staticmethod
-    async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    @log_action
+    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         welcome_message = "Welcome to the bot! Here are the commands you can use:\n\n"
         welcome_message += "\n".join([f"{cmd} - {desc}" for cmd, desc in COMMANDS_DICT.items()])
         await update.message.reply_text(welcome_message)
 
+    @log_action
+    @require_authentication
     async def upload_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         upload_message = (
             f"Simply send a file, and it will be saved to -> {self._uploads_dir}"
         )
         await update.message.reply_text(upload_message)
 
+    @require_authentication
     def list_files_and_directories(self, path: str):
         entries = os.listdir(path)
         buttons = []
@@ -346,8 +382,9 @@ class SysTamer:
         buttons.append(InlineKeyboardButton("❌️ Close", callback_data=f"action close"))
         return buttons
 
-
+    @log_action
     @check_for_permission
+    @require_authentication
     async def browse(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         path = str(Path.home())  # Start from the home directory
         buttons = self.list_files_and_directories(path)
@@ -356,10 +393,12 @@ class SysTamer:
         await update.message.reply_text('Choose a directory or file:', reply_markup=reply_markup)
 
     @check_for_permission
+    @require_authentication
     async def handle_navigation(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         data = query.data.split(' ', 1)
         command = data[0]  # The command is the first part (e.g., "cd", "file", "action")
+        print_cmd(f"handle_navigation received cmd -> {data} {'(' + self._browse_path_dict.get(data[1]) + ')' if len(data) >= 1 and data[1] in self._browse_path_dict else ''}")
 
         if command == "cd":  # Handle directory navigation
             hashed_path = data[1]
@@ -424,7 +463,7 @@ class SysTamer:
 
 
     def _register_command_handlers(self, application: telegram.ext.Application) -> None:
-        application.add_handler(CommandHandler("start", self.start))  # todo int
+        application.add_handler(CommandHandler("start", self.start))
         application.add_handler(CommandHandler("help", self.start))
         application.add_handler(CommandHandler("browse", self.browse))
         application.add_handler(CommandHandler("system", self.system_resource_monitoring))
@@ -456,35 +495,31 @@ class SysTamer:
         return application
 
     async def run_forever(self) -> NoReturn:
-        # TODO handle "telegram.error.Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running"
-        # TODO ^ but where?
-        try: # todo print info errors etc
-            printf("Initializing application...")
+        try:
+            print_info("Initializing application...")
             await self._application.initialize()
-            printf("Starting application...")
             await self._application.start()
-            printf("Starting updater polling...")
+            print_info("Starting updater polling...")
             await self._application.updater.start_polling()
             await asyncio.Event().wait()
-        except KeyboardInterrupt:  # todo verify if needed
-            printf("Stopping updater polling...")
+        except KeyboardInterrupt:
+            print_info("Stopping...")
             await self._application.updater.stop()
-            printf("Stopping application...")
             await self._application.stop()
         except telegram.error.InvalidToken:
-            printf("bad token")
+            print_error("bad token - make sure you set a correct bot token in `config.json`")
         except httpcore.ConnectTimeout:
-            printf("timeout - check connection")
+            print_error("Connection timeout")
         finally:
             try:
-                printf("Shutting down application...")
+                print_info("Shutting down...")
                 await self._application.shutdown()
             except RuntimeError as exc:
                 pass  # ignore 'RuntimeError: This Application is still running!'
 
+
 async def main() -> NoReturn:
     config_path = Path(__file__).resolve().parent / "config.json"
-    printf(config_path)
     conf = load_config(config_path)
     tamer = SysTamer(conf)
     await tamer.run_forever()
