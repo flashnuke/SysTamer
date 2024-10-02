@@ -86,7 +86,8 @@ class SysTamer:
         self._browse_path_dict = dict()
         self._ignored_paths = SysTamer.load_ignore_paths()
 
-    async def delete_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    @staticmethod
+    async def delete_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             await context.bot.delete_message(
                 chat_id=update.effective_chat.id,
@@ -358,6 +359,7 @@ class SysTamer:
         )
         await update.message.reply_text(upload_message)
 
+    @check_for_permission
     def list_files_and_directories(self, path: str):
         entries = os.listdir(path)
         buttons = []
@@ -498,13 +500,19 @@ class SysTamer:
 
         return application
 
+    def _error_handler(self, update: object, context: telegram.ext.CallbackContext):
+        try:
+            raise context.error
+        except Exception as exc:
+            print_error(f"Exception occurred: {exc}")
+
     async def run_forever(self) -> NoReturn:
         try:
             print_info("Initializing application...")
             await self._application.initialize()
             await self._application.start()
             print_info("Starting updater polling...")
-            await self._application.updater.start_polling()
+            await self._application.updater.start_polling(error_callback=self._error_handler)
             await asyncio.Event().wait()
         except KeyboardInterrupt:
             print_info("Stopping...")
