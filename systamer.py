@@ -18,7 +18,7 @@ from PIL import Image
 
 from pathlib import Path
 from typing import NoReturn, Any, Callable, Awaitable
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler, CallbackQueryHandler
 
 nest_asyncio.apply()
@@ -43,7 +43,7 @@ def require_authentication(func, *args, **kwargs):
             return await func(self, update, context, *args, **kwargs)
         else:
             # User is not authenticated, prompt for password
-            await update.message.reply_text("please login /login <password>")
+            await update.message.reply_text("please login via /login *<password\>*", parse_mode='MarkdownV2')
 
     return _impl
 
@@ -347,9 +347,11 @@ class SysTamer:
 
     @log_action
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        welcome_message = "Commands list:\n\n"
-        welcome_message += "\n".join([f"{cmd} - {desc}" for cmd, desc in COMMANDS_DICT.items()])
-        await update.message.reply_text(welcome_message)
+        welcome_message = TG_BANNER + "\n\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\n" \
+                                      "by [@flashnuke](https://github.com/flashnuke/SysTamer)" \
+                                      "\n\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\n"\
+                          + generate_cmd_dict_msg("Commands", COMMANDS_DICT)
+        await update.message.reply_text(welcome_message, parse_mode='MarkdownV2', disable_web_page_preview=True)
 
     @log_action
     @require_authentication
@@ -507,6 +509,8 @@ class SysTamer:
             print_error(f"Exception occurred: {exc}")
 
     async def run_forever(self) -> NoReturn:
+        await self._application.updater.bot.set_my_commands([BotCommand(k, v) for k, v in COMMANDS_DICT.items()])
+
         try:
             print_info("Initializing application...")
             await self._application.initialize()
