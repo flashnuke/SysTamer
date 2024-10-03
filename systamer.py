@@ -300,7 +300,7 @@ class SysTamer:
         await update.message.reply_text(response)
 
     @log_action
-    # @require_authentication
+    @require_authentication
     async def list_processes(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         processes = []
         args_lower = [i.lower() for i in context.args]
