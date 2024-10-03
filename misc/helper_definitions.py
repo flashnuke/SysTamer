@@ -44,16 +44,16 @@ def generate_cmd_dict_msg(description, commands: dict) -> str:
 
 
 def generate_proc_dict_msg(description, processes: list) -> List[str]:
-    table_header = f"{description}\n| PID   | Name                 | CPU (%) | Memory (%)  |\n"
-    separator = "|-------|----------------------|---------|-------------|\n"
+    table_header = f"{description}\n| PID   | Name                 | CPU (%) | Mem (%)  |\n"
+    separator = "|-------|----------------------|---------|----------|\n"
     table = table_header + separator
     chunks = list()
 
     for proc in processes:
         pid = str(proc['pid']).ljust(5)
-        name = (proc['name'] or "N/A")[:20].ljust(20)  # truncate if longer than 20 characters, handle None
+        name = (proc['name'] or "N/A")[:20].ljust(20)
         cpu = f"{proc['cpu_percent']:.1f}".ljust(7)
-        mem = f"{round(proc['memory_percent'], 1):.1f}".ljust(11)
+        mem = f"{round(proc['memory_percent'], 1):.1f}".ljust(8)
 
         table += f"| {pid} | {name} | {cpu} | {mem} |\n"
         if len(table) > 3500:  # Telegram's max message size is about 4096 bytes
