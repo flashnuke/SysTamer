@@ -139,21 +139,18 @@ class SysTamer:
 
         # Check if the user provided a password with the /login command
         if len(context.args) == 0:
-            await update.message.reply_text("Please provide a password. Usage: /login <password>")
+            await update.message.reply_text("Please provide a password, usage: /login *<password\>*",
+                                            parse_mode='MarkdownV2')
             return
 
         user_password = context.args[0]  # Get the provided password
 
-        # Delete the message containing the password
         await self.delete_message(update, context)
 
-        # Check if the password is correct
         if user_password == SysTamer._PASSWORD:
-            # Correct password, authenticate the user
             context.user_data["authenticated"] = True
             await update.message.reply_text("Password accepted! You are now authenticated.")
         else:
-            # Incorrect password
             await update.message.reply_text("Incorrect password, please try again.")
 
     @log_action
@@ -282,7 +279,7 @@ class SysTamer:
                 response_lines.append(f"**{index}**. {entry}")
 
             response_text = "\n".join(response_lines)
-            await update.message.reply_text(response_text, parse_mode='Markdown')
+            await update.message.reply_text(response_text, parse_mode='MarkdownV2')
 
         except Exception as e:
             await update.message.reply_text(f"An error occurred: {str(e)}")
@@ -307,36 +304,31 @@ class SysTamer:
     async def list_processes(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         processes = []
         args_lower = [i.lower() for i in context.args]
+
         for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
-            if len(context.args) > 0:
-                # filter provided - and proc is not in list (using any() to check for substr)
-                filter_name = any(s in proc.info['name'].lower() for s in args_lower if proc.info['name'])
-                filter_pid = any(s in str(proc.info['pid']) for s in args_lower)
-                if not (filter_name or filter_pid):
-                    continue
-            processes.append(f"PID: {proc.info['pid']}, Name: {proc.info['name']}, "
-                             f"CPU: {proc.info['cpu_percent']}%, Mem: {round(proc.info['memory_percent'], 1)}%")
+            try:
+                proc_info = proc.as_dict(attrs=['pid', 'name', 'cpu_percent', 'memory_percent'])
+                if len(context.args) > 0:
+                    # filter provided - and proc is not in list (using any() to check for substr)
+                    filter_name = any(s in proc_info['name'].lower() for s in args_lower if proc_info['name'])
+                    filter_pid = any(s in str(proc_info['pid']) for s in args_lower)
+                    if not (filter_name or filter_pid):
+                        continue
+                processes.append(proc_info)
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
 
-        if len(processes) == 0:
-            output = "no processes found"
-            if len(context.args) > 0:
-                output += f", filters: {context.args}"
-            await update.message.reply_text(output)
-        else:
-            response_lst = list()
-            for proc in processes:
-                response_lst.append(proc)
-                if len(response_lst) > 20:
-                    await update.message.reply_text("\n".join(response_lst))
-                    response_lst.clear()
-
-            if len(response_lst) > 0:
-                await update.message.reply_text("\n".join(response_lst))
+        table_chunks = generate_proc_dict_msg(f"Processes:{len(processes)},Filters:{context.args if context.args else None}", processes)
+        for chunk in table_chunks:
+            await update.message.reply_text(f"```{chunk}```", parse_mode="MarkdownV2")
 
     @log_action
     @require_authentication
     async def kill_process(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         process_ids = [int(i) for i in context.args]
+        if not process_ids:
+            await update.message.reply_text("No PID provided, usage: /kill *<pid\>*", parse_mode="MarkdownV2")
+            return
         for process_id in process_ids:
             try:
                 proc = psutil.Process(process_id)
