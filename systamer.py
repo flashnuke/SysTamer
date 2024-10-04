@@ -353,7 +353,6 @@ class SysTamer:
         )
         await update.message.reply_text(upload_message)
 
-    @check_for_permission
     def list_files_and_directories(self, path: str):
         entries = os.listdir(path)
         buttons = []
