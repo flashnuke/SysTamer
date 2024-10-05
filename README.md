@@ -51,7 +51,7 @@ python3 systamer.py
 * Authenticate: `/login <password>` to authenticate yourself (if a password was [set up](https://github.com/flashnuke/SysTamer?tab=readme-ov-file#setting-up-configjson)).
 * Use Commands: After authentication, you can use all available commands.
 
-### Commands
+### All Commands
 | Command | Description |
 |-------------------------|---------------|
 | /start </br> /help      | Display the help message with available commands     |
@@ -64,6 +64,13 @@ python3 systamer.py
 | /browse                 | Browse and manage (download & delete) files on the system </br> Paths under `.browseignore` will not be displayed   |
 | /upload                 | Instructions on how to upload files   |
 | /list_uploads           | List files you’ve uploaded via Telegram   |
+
+
+### Additional Usage Notes
+* Uploading files to the system is done by simply sending a file to the bot
+* Navigating the system files is done by an interactive button interface
+ </br><img width="200" alt="image" src="https://github.com/user-attachments/assets/71cb0e91-a47e-47d8-a5d1-696ad82e8ea9">
+ </br><img width="200" alt="image" src="https://github.com/user-attachments/assets/64955fb9-7e79-4f3f-95f0-ecdd6e6b7706">
 
 
 ## Troubleshooting
