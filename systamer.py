@@ -160,6 +160,7 @@ class SysTamer:
             return
         if context.user_data.get("authenticated", False):
             self.deauthenticate(context)
+            await update.message.reply_text("Logged out successfully.")
         else:
             # User is not authenticated
             await update.message.reply_text("Not logged in.")
