@@ -431,7 +431,8 @@ class SysTamer:
                     [InlineKeyboardButton("⬅️ Back", callback_data=f"cd {parent_hashed}")]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
-                await query.edit_message_text(text="Choose an action:", reply_markup=reply_markup)
+                await query.edit_message_text(text=f"Choose an action for {os.path.basename(selected_file)}:",
+                                              reply_markup=reply_markup)
             else:
                 await query.edit_message_text(text="The file is invalid or does not exist.")
         elif command == "action":  # Handle file actions (download or delete)
