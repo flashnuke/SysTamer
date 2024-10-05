@@ -1,6 +1,8 @@
 # SysTamer
 ![image](https://github.com/user-attachments/assets/34ea1223-1d90-4238-9536-a8cd74e964b9)
 
+
+
 ## Introduction
 
 SysTamer is a Telegram bot that allows you to remotely monitor and control your system through Telegram messages. 
@@ -9,7 +11,7 @@ SysTamer is a Telegram bot that allows you to remotely monitor and control your 
 * Monitor system resources (CPU, memory, disk usage)
 * List and manage running processes
 * Capture and receive screenshots
-* Browse and manage files on your system
+* Browse and manage (download & delete) files on your system
 * Upload files directly to your system via Telegram
 * Secure access with authentication
 
@@ -43,6 +45,8 @@ python3 systamer.py
 ```
 
 ### Interact via Telegram
+ <img width="300" alt="image" src="https://github.com/user-attachments/assets/ebeb8a88-50e4-4664-bc92-69c9d8686687">
+
 * Start: `/start` or `/help` to get the list of commands.
 * Authenticate: `/login <password>` to authenticate yourself (if a password was [set up](https://github.com/flashnuke/SysTamer?tab=readme-ov-file#setting-up-configjson)).
 * Use Commands: After authentication, you can use all available commands.
@@ -57,7 +61,7 @@ python3 systamer.py
 | /processes `[filter]`   | List running processes. Optionally filter by process name or PID. </br> You can filter processes by name. For example: `/processes chrome`     |
 | /kill `<pid>`           | Terminate a process by its PID   |
 | /screenshot             | Capture and receive a screenshot of the system’s primary monitor     |
-| /browse                 | Browse and manage files on the system (Paths under `.browseignore` will not be displayed)   |
+| /browse                 | Browse and manage (download & delete) files on the system </br> Paths under `.browseignore` will not be displayed   |
 | /upload                 | Instructions on how to upload files   |
 | /list_uploads           | List files you’ve uploaded via Telegram   |
 
