@@ -43,7 +43,19 @@ def generate_cmd_dict_msg(description, commands: dict) -> str:
     return f"```{table}```"
 
 
-def generate_proc_dict_msg(description, processes: list) -> List[str]:
+def generate_machine_stats_msg(description, cpu_usage, memory_info, disk_usage) -> str:
+    header = f"{description}\n| Resource   | Usage                     |\n"
+    separator = "|------------|---------------------------|\n"
+
+    table = header + separator
+    table += f"| {'CPU':<10} | {f'{cpu_usage}%':<25} |\n"
+    table += f"| {'Memory':<10} | {f'{memory_info.percent}% ({memory_info.used / (1024 ** 3):.1f}/{memory_info.total / (1024 ** 3):.1f} GB)':<25} |\n"
+    table += f"| {'Disk':<10} | {f'{disk_usage.percent}% ({disk_usage.used / (1024 ** 3):.1f}/{disk_usage.total / (1024 ** 3):.1f} GB)':<25} |\n"
+
+    return f"```{table}```"
+
+
+def generate_proc_stats_msg(description, processes: list) -> List[str]:
     table_header = f"{description}\n| PID   | Name                 | CPU (%) | Mem (%)  |\n"
     separator = "|-------|----------------------|---------|----------|\n"
     table = table_header + separator
@@ -75,5 +87,3 @@ def load_config(conf_path: Path) -> Dict[str, Any]:
     except json.JSONDecodeError as e:
         print_error(f"Error decoding config -> {conf_path}.")
         raise e
-
-
