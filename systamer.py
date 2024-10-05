@@ -374,12 +374,12 @@ class SysTamer:
                 buttons.append(InlineKeyboardButton(entry, callback_data=f"file {entry_hashed}"))
 
         # Add "Back" button to navigate to the parent directory if not at the root
-        if path != str(Path.home()):  # If we are not in the home directory
-            parent_directory = os.path.dirname(path)  # Get parent directory
-            if os.path.isdir(parent_directory):  # Ensure the parent directory is valid
-                parent_hashed = hashlib.md5(parent_directory.encode()).hexdigest()
-                self._browse_path_dict[parent_hashed] = parent_directory
-                buttons.append(InlineKeyboardButton("⬅️ Back", callback_data=f"cd {parent_hashed}"))
+        # if path != str(Path.home()):  # If we are not in the home directory
+        parent_directory = os.path.dirname(path)  # Get parent directory
+        if os.path.isdir(parent_directory):  # Ensure the parent directory is valid
+            parent_hashed = hashlib.md5(parent_directory.encode()).hexdigest()
+            self._browse_path_dict[parent_hashed] = parent_directory
+            buttons.append(InlineKeyboardButton("⬅️ Back", callback_data=f"cd {parent_hashed}"))
         buttons.append(InlineKeyboardButton("❌️ Close", callback_data=f"action close"))
         return buttons
 
