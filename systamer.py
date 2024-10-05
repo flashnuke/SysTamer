@@ -451,11 +451,12 @@ class SysTamer:
                 if selected_file:
                     try:
                         os.remove(selected_file)
-                        await query.edit_message_text(text=f"File '{selected_file}' has been deleted.")
+                        msg = f"File '{selected_file}' has been deleted."
                     except FileNotFoundError:
-                        await query.edit_message_text(text=f"File '{selected_file}' not found.")
+                        msg = f"File '{selected_file}' not found."
                     except Exception as e:
-                        await query.edit_message_text(text=f"Error: {str(e)}")
+                        msg = f"Error: {str(e)} when attempting to delete."
+                    await query.edit_message_text(text=msg)
 
             elif action_type == "close":
                 await self.delete_message(update, context)
